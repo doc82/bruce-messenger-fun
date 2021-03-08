@@ -1,0 +1,9 @@
+[package]
+name = "chat-server-fun"
+version = "0.1.0"
+authors = ["Bruce Bjorklund<doc82>"]
+edition = "2018"
+
+[dependencies]
+tokio = { version = "1.2.0", features = ["full"] }
+mini-redis = "0.4"
