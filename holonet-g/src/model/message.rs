@@ -8,9 +8,9 @@ pub struct Message {
     pub id: Uuid,
     pub channel_id: Uuid,
     pub body: String,
-    // TODO: the kanoogi-user object is just for quick-lookups... we don't want to store this in the DB< just the user UUID
+    // TODO: the holonet-user object is just for quick-lookups... we don't want to store this in the DB< just the user UUID
     pub user: Session,
-    // This is the Kanoogi-Session UUID
+    // This is the Holonet-Session UUID
     pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
 }

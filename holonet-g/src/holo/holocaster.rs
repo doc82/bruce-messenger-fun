@@ -35,14 +35,14 @@ pub struct Holocaster {
     channels: RwLock<Vec<Channel>>,
 }
 
-pub struct DefaultKanoogiChannel {
+pub struct DefaultHolonetChannel {
     name: String,
     id: Uuid,
 }
 
 lazy_static! {
-    static ref DEFAULT_KANOOGI_CHANNEL: DefaultKanoogiChannel = DefaultKanoogiChannel {
-        name: String::from("kanoogi"),
+    static ref DEFAULT_HOLONET_CHANNEL: DefaultHolonetChannel = DefaultHolonetChannel {
+        name: String::from("holonet"),
         id: Uuid::parse_str("65fe9132-a31f-11eb-bcbc-0242ac130002").unwrap()
     };
 }
@@ -54,11 +54,11 @@ impl Holocaster {
         // 16 is what i found in default documents...
         let (response_sender, _) = broadcast::channel(16);
 
-        // Seed the Kanoogi Default channel
+        // Seed the Holonet Default channel
         // TODO: (for now all users will only use this one chat-channel)
         let channel_default: Vec<Channel> = vec![Channel::new(
-            DEFAULT_KANOOGI_CHANNEL.id,
-            &DEFAULT_KANOOGI_CHANNEL.name,
+            DEFAULT_HOLONET_CHANNEL.id,
+            &DEFAULT_HOLONET_CHANNEL.name,
             Uuid::nil(),
         )];
 
@@ -118,7 +118,7 @@ impl Holocaster {
     // Handle a user joining the stream
     async fn process_join(&self, client_id: Uuid, body: JoinEvent) {
         // TODO: add validation!
-        // I don't have validation right now because we are assuming all the data provided by Kanoogi is good to go!
+        // I don't have validation right now because we are assuming all the data provided by Holonet is good to go!
         println!("processing join event!");
 
         // Track the client with a session object
