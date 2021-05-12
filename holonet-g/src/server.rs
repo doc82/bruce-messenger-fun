@@ -123,6 +123,7 @@ impl Server {
     tokio::spawn(rx.forward(ws_sink));
 
     // HANDLE INPUT STREAM
+    // reading will return back a stream 
     let reading = client
       .handle_incoming(ws_stream)
       .try_for_each(|request_packet| async {
@@ -134,11 +135,10 @@ impl Server {
     if let Err(err) = tokio::select! {
         result = reading => result,
         // HANDLE OUTPUT STREAM
+        // 
         _message = client
         .write_output(holocaster_listener, tx) => {
-          // println!("SENDING!! message out!!");
-          // tx.send(Ok(message)).unwrap();
-          println!("ALL MESSAGES SENT CLOSING!");
+          println!("ALL MESSAGES SENT CLOSING OUT!");
           Ok(())
         },
     } {

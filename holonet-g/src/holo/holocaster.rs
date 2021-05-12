@@ -96,11 +96,11 @@ impl Holocaster {
     }
 
     // Remove user on disconnect
-    pub async fn handle_disconnect(&self, client_id: Uuid) {
-        if self.sessions.write().await.remove(&client_id).is_some() {
-            self.send_except_client_id(
-                client_id,
-                Output::UserDisconnect(UserDiscconnectOutput::new(client_id)),
+    pub async fn handle_disconnect(&self, session_id: Uuid) {
+        if self.sessions.write().await.remove(&session_id).is_some() {
+            self.send_except_session_id(
+                session_id,
+                Output::UserDisconnect(UserDiscconnectOutput::new(session_id)),
             )
             .await;
         }
@@ -110,23 +110,23 @@ impl Holocaster {
     // TODO: Session Generates a Message
     async fn handle_message(&self, request_packet: RequestPacket) {
         match request_packet.body {
-            Input::Join(body) => self.process_join(request_packet.client_id, body).await,
-            Input::Message(body) => self.process_message(request_packet.client_id, body).await,
+            Input::Join(body) => self.process_join(request_packet.session_id, body).await,
+            Input::Message(body) => self.process_message(request_packet.session_id, body).await,
         }
     }
 
     // Handle a user joining the stream
-    async fn process_join(&self, client_id: Uuid, body: JoinEvent) {
+    async fn process_join(&self, session_id: Uuid, body: JoinEvent) {
         // TODO: add validation!
         // I don't have validation right now because we are assuming all the data provided by Holonet is good to go!
         println!("processing join event!");
 
         // Track the client with a session object
-        let session = Session::new(client_id, &body.user_name);
+        let session = Session::new(session_id, &body.user_name);
         self.sessions
             .write()
             .await
-            .insert(client_id, session.clone());
+            .insert(session_id, session.clone());
         println!("saved session event!");
 
         // Send payload of info to the user that just joined
@@ -134,7 +134,7 @@ impl Holocaster {
         let mut output_packet = UserJoinedOutput {
             channels: vec![],
             user: UserModelResponse {
-                id: client_id,
+                id: session_id,
                 name: String::from(body.user_name),
             },
         };
@@ -150,10 +150,10 @@ impl Holocaster {
         }
 
         println!("Notifying session confirmation of join");
-        self.send_client_id(client_id, Output::UserJoined(output_packet.clone()))
+        self.send_session_id(session_id, Output::UserJoined(output_packet.clone()))
             .await;
         println!("Notifying all other users confirmation of join");
-        self.send_except_client_id(client_id, Output::UserJoined(output_packet))
+        self.send_except_session_id(session_id, Output::UserJoined(output_packet))
             .await;
     }
 
@@ -174,25 +174,25 @@ impl Holocaster {
     // async fn get_messages_from_channel(&self, channel: Channel) -> Vec<Message> {}
 
     // Handle a user sending a message to the stream
-    async fn process_message(&self, client_id: Uuid, message: MessageEvent) {
+    async fn process_message(&self, session_id: Uuid, message: MessageEvent) {
         // Verify authentication of the user
-        let user = if let Some(user) = self.sessions.read().await.get(&client_id) {
+        let user = if let Some(user) = self.sessions.read().await.get(&session_id) {
             user.clone()
         } else {
-            self.send_error(client_id, ErrorOutput::InvalidSession)
+            self.send_error(session_id, ErrorOutput::InvalidSession)
                 .await;
             return;
         };
 
         if message.body.is_empty() || message.body.len() > MAX_MESSAGE_BODY_LENGTH {
-            self.send_error(client_id, ErrorOutput::InvalidMessageRequest)
+            self.send_error(session_id, ErrorOutput::InvalidMessageRequest)
                 .await;
             return;
         }
 
         let message = Message::new(
             Uuid::new_v4(),
-            client_id,
+            session_id,
             user.clone(),
             &message.body,
             Utc::now(),
@@ -216,14 +216,14 @@ impl Holocaster {
         );
 
         // output the message to the client as confirmation
-        self.send_client_id(
-            client_id.clone(),
+        self.send_session_id(
+            session_id.clone(),
             Output::UserMessage(response_packet.clone()),
         )
         .await;
 
         // send to the rest of the clients
-        self.send_except_client_id(client_id, Output::Message(response_packet))
+        self.send_except_session_id(session_id, Output::Message(response_packet))
             .await;
     }
 
@@ -236,6 +236,11 @@ impl Holocaster {
         }
     }
 
+    /////////////////////
+    //  The following seeries of send() functions handle the logic of directing responses to the response_sender stream
+    // TODO: if we want to make this horizontally scalable we need a pub/sub solution 
+    // to "echo" messeages to/from other services in the cluster.. for this use case probably redis
+    /////////////////////
     async fn send(&self, output: Output) {
         println!("!!! Attempting to send !!!");
         if self.response_sender.receiver_count() == 0 {
@@ -254,47 +259,48 @@ impl Holocaster {
         }
     }
 
-    async fn send_client_id(&self, client_id: Uuid, output: Output) {
-        // println!("!!! send_client_id out messages to session: {}", client_id);
+    async fn send_session_id(&self, session_id: Uuid, output: Output) {
+        // println!("!!! send_session_id out messages to session: {}", session_id);
         if self.response_sender.receiver_count() == 0 {
-            println!("Aborting send_client_id - no clients listening!");
+            println!("Aborting send_session_id - no clients listening!");
             return;
         }
 
         let sessions = self.sessions.read().await;
         sessions
             .values()
-            .filter(|session| session.id != client_id)
+            .filter(|session| session.id != session_id)
             .for_each(|session| {
-                println!("send_client_id flushing out messages to session: {}", session.id);
+                println!("send_session_id flushing out messages to session: {}", session.id);
                 self.response_sender
-                    .send(ResponsePacket::new(session.id, client_id, output.clone()))
+                    .send(ResponsePacket::new(session.id, session_id, output.clone()))
                     .unwrap();
             });
     }
 
-    async fn send_except_client_id(&self, client_id: Uuid, output: Output) {
-        println!(" send_except_client_id out messages to session: {}", client_id);
+    // Send a message to everyone but the specified session ID
+    async fn send_except_session_id(&self, session_id: Uuid, output: Output) {
+        println!(" send_except_session_id out messages to session: {}", session_id);
         if self.response_sender.receiver_count() == 0 {
-            println!("Aborting send_client_id - no clients listening!");
+            println!("Aborting send_session_id - no clients listening!");
             return;
         }
 
         let sessions = self.sessions.read().await;
         sessions
             .values()
-            .filter(|session| session.id == client_id)
+            .filter(|session| session.id == session_id)
             .for_each(|session| {
-                println!("send_except_client_id flushing out messages to session: {}", session.id);
+                println!("send_except_session_id flushing out messages to session: {}", session.id);
                 self.response_sender
-                    .send(ResponsePacket::new(session.id, client_id, output.clone()))
+                    .send(ResponsePacket::new(session.id, session_id, output.clone()))
                     .unwrap();
             });
     }
 
-    async fn send_error(&self, client_id: Uuid, error: ErrorOutput) {
+    async fn send_error(&self, session_id: Uuid, error: ErrorOutput) {
         println!("sending errors!");
-        self.send_client_id(client_id, Output::Error(error)).await;
+        self.send_session_id(session_id, Output::Error(error)).await;
     }
 }
 

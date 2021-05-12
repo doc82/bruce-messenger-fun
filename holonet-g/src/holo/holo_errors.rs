@@ -33,5 +33,5 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-// Result
+// provide a result type that throws our custom error trait!
 pub type Result<T> = result::Result<T, Error>;

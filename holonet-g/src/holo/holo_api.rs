@@ -43,15 +43,15 @@ pub enum ErrorOutput {
 
 #[derive(Debug, Clone)]
 pub struct RequestPacket {
-    pub client_id: Uuid,
+    pub session_id: Uuid,
     pub channel_id: Uuid,
     pub body: Input,
 }
  
 impl RequestPacket {
-    pub fn new(client_id: Uuid, channel_id: Uuid, body: Input) -> Self {
+    pub fn new(session_id: Uuid, channel_id: Uuid, body: Input) -> Self {
         RequestPacket {
-            client_id,
+            session_id,
             channel_id,
             body,
         }
@@ -60,15 +60,15 @@ impl RequestPacket {
 
 #[derive(Debug, Clone)]
 pub struct ResponsePacket {
-    pub client_id: Uuid,
+    pub session_id: Uuid,
     pub channel_id: Uuid,
     pub output: Output,
 }
 
 impl ResponsePacket {
-    pub fn new(client_id: Uuid, channel_id: Uuid, output: Output) -> Self {
+    pub fn new(session_id: Uuid, channel_id: Uuid, output: Output) -> Self {
         ResponsePacket {
-            client_id,
+            session_id,
             channel_id,
             output,
         }

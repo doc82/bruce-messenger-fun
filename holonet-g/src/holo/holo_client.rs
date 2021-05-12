@@ -14,7 +14,7 @@ use crate::holo::holo_errors::{Error, Result};
 pub struct HoloClient {
     // This is the session UUID
     pub id: Uuid,
-    // A session is bound to a channel (it can be changed at any time)
+    // a client can belong to multiple channels at once!
     pub channels: Vec<Uuid>,
 }
 
@@ -33,7 +33,7 @@ impl HoloClient {
         &self,
         stream: SplitStream<warp::ws::WebSocket>,
     ) -> impl Stream<Item = Result<RequestPacket>> {
-        let client_id = self.id;
+        let session_id = self.id;
 
         println!("Attempting to handle na incoming connect!!");
 
@@ -56,7 +56,8 @@ impl HoloClient {
                     let body: Input = serde_json::from_str(message.to_str().unwrap())?;
                     println!("!! Sending response back to client !!");
                     // TODO: the second param should be a channel id
-                    Ok(RequestPacket::new(client_id, client_id, body))
+                    // Using the session ID so I can test the code flow
+                    Ok(RequestPacket::new(session_id, session_id, body))
                 }
             })
     }
@@ -68,12 +69,13 @@ impl HoloClient {
             std::result::Result<warp::ws::Message, warp::Error>,
         >,
     ) {
+        let session_id = self.id;
         println!("Attempting to write output!!!");
-        let client_id = self.id;
 
+        // 
         while let Some(result) = reciever.recv().await.ok() {
-            if result.client_id == client_id {
-                println!("got the message to send {}", result.client_id);
+            if result.session_id == session_id {
+                println!("got the message to send {}", result.session_id);
                 let data = serde_json::to_string(&result.output).unwrap();
                 let msg = warp::ws::Message::text(data);
                 stream.send(Ok(msg)).unwrap();
